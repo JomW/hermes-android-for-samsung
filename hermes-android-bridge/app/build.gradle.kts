@@ -5,14 +5,14 @@ plugins {
 
 android {
     namespace = "com.hermesandroid.bridge"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.hermesandroid.bridge"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3
-        versionName = "0.4.1"
+        versionCode = 7
+        versionName = "0.5.3"
     }
 
     buildFeatures {
@@ -69,6 +69,9 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.gson)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Health Connect: 直接读取步数/心率/睡眠/卡路里 (三星健康 → Health Connect 同步)
+    // 正式版坐标 androidx.health.connect:connect-client; 1.1.0 需 compileSdk36 + AGP8.9 (已升级)
+    implementation("androidx.health.connect:connect-client:1.1.0")
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.robolectric)

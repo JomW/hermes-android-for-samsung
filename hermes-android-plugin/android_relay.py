@@ -423,7 +423,7 @@ async def _handle_ws(request: web.Request, state: _RelayState) -> web.WebSocketR
         )
         raise web.HTTPForbidden(text="Invalid pairing code")
 
-    ws = web.WebSocketResponse(heartbeat=15.0)
+    ws = web.WebSocketResponse(heartbeat=60.0)
     await ws.prepare(request)
 
     # Only one phone at a time — kick previous if any

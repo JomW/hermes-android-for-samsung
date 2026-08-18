@@ -37,3 +37,10 @@ hermes-android-bridge/local.properties
 
 # local agent session state
 .pi/
+
+# Local gradle home
+.gradle-home/
+
+# accidental build/relay logs
+build.log
+relay.log

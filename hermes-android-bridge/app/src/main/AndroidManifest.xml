@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- HTTP server -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -23,6 +24,17 @@
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- Android 13+ 通知权限: 没有它三星会锁死通知使用权, 通知监听无法启用 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 使用情况访问: 系统级前台应用真值 + 最近活跃检测, 不依赖无障碍服务 -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+    <!-- Health Connect 健康数据只读 (Android 14+, 由用户在健康连接App中授权) -->
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_SLEEP" />
+    <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
     <uses-feature android:name="android.hardware.telephony.gsm" android:required="false" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
@@ -42,6 +54,11 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Health Connect (Android 14+) 必需: 权限使用查看入口, 缺失会导致数据访问被拒 -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
             </intent-filter>
         </activity>
 

@@ -48,6 +48,8 @@ object CommandDispatcher {
                 mapOf(
                     "status" to "ok",
                     "accessibilityService" to serviceRunning,
+                    // 无障碍僵尸状态诊断: 距上次收到窗口事件多久(ms), -1=从未收到
+                    "a11yLastEventAgoMs" to com.hermesandroid.bridge.foreground.ForegroundAppTracker.lastEventAgoMs(),
                     "authenticated" to authenticated
                     // Version omitted: /ping is unauthenticated and version info
                     // helps attackers fingerprint the deployment and target known
@@ -146,16 +148,31 @@ object CommandDispatcher {
             }
 
             method == "GET" && path == "/current_app" -> {
-                val result = withContext(Dispatchers.Main) {
-                    val service = BridgeAccessibilityService.instance
-                    val windows = service?.windows ?: emptyList()
-                    val roots = windows.mapNotNull { it.root }
-                    val firstRoot = roots.firstOrNull()
-                    val pkg = firstRoot?.packageName?.toString() ?: "unknown"
-                    val cls = firstRoot?.className?.toString() ?: "unknown"
-                    roots.forEach { it.recycle() }
-                    windows.forEach { it.recycle() }
-                    mapOf("package" to pkg, "className" to cls)
+                // UsageStats 真值 → 事件流缓存 → 窗口列表兜底 (见 ForegroundAppTracker)
+                val result = withContext(Dispatchers.IO) {
+                    com.hermesandroid.bridge.foreground.ForegroundAppTracker.current(
+                        com.hermesandroid.bridge.BridgeApplication.instance
+                    )
+                }
+                result to 200
+            }
+
+            method == "GET" && path == "/recent_apps" -> {
+                val limit = params.get("limit")?.asString?.toIntOrNull() ?: 20
+                val result = withContext(Dispatchers.IO) {
+                    com.hermesandroid.bridge.foreground.ForegroundAppTracker.recentApps(
+                        com.hermesandroid.bridge.BridgeApplication.instance, limit
+                    )
+                }
+                mapOf("apps" to result, "count" to result.size) to 200
+            }
+
+            method == "GET" && path == "/health" -> {
+                // Health Connect 直接读取健康数据 (步数/睡眠/心率/卡路里)
+                val result = withContext(Dispatchers.IO) {
+                    com.hermesandroid.bridge.health.HealthDataReader.read(
+                        com.hermesandroid.bridge.BridgeApplication.instance
+                    )
                 }
                 result to 200
             }

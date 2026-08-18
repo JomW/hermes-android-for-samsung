@@ -103,7 +103,7 @@ object ScreenRecorder {
 
                 mr.stop()
                 mr.release()
-                vd.release()
+                vd?.release()
                 recorder = null
                 virtualDisplay = null
 

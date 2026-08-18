@@ -19,24 +19,21 @@ class BridgeAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         instance = this
-        serviceInfo = serviceInfo.apply {
-            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
-                    AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
-                    AccessibilityEvent.TYPE_VIEW_CLICKED or
-                    AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED or
-                    AccessibilityEvent.TYPE_VIEW_FOCUSED or
-                    AccessibilityEvent.TYPE_VIEW_SCROLLED
-            feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
-            flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
-                    AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
-                    AccessibilityServiceInfo.DEFAULT
-            notificationTimeout = 100
-        }
+        // 注意: 三星 OneUI 固件 bug——在 onServiceConnected 里重赋值 serviceInfo
+        // 会破坏事件分发(服务收不到任何 AccessibilityEvent)。全部属性已由
+        // accessibility_service_config.xml 配置(typeAllMask + 全部 flags), 此处不再重赋值。
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event != null) {
             com.hermesandroid.bridge.event.EventStore.add(event)
+            // 同步前台事件缓存: WINDOW_STATE_CHANGED 是最精确的窗口切换信号
+            if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                com.hermesandroid.bridge.foreground.ForegroundAppTracker.onWindowStateChanged(
+                    event.packageName?.toString(),
+                    event.className?.toString()
+                )
+            }
         }
     }
 

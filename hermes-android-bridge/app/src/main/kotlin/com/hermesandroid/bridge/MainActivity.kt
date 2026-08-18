@@ -26,6 +26,7 @@ class MainActivity : Activity() {
 
     companion object {
         private const val REQUEST_CODE_SCREEN_RECORD = 1001
+        private const val REQUEST_CODE_NOTIFICATIONS = 1002
     }
 
     private lateinit var tvA11yStatus: TextView
@@ -76,9 +77,27 @@ class MainActivity : Activity() {
         setupPairingCode()
         setupPermissions()
         setupRelayConnection()
+        requestNotificationPermission()
 
         updateConnectionInfo()
         updateStatus()
+    }
+
+    /**
+     * Android 13+: 通知运行时权限。没有它三星会锁死"通知使用权",
+     * 通知监听服务无法启用。
+     */
+    private fun requestNotificationPermission() {
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            val hasIt = checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (!hasIt) {
+                requestPermissions(
+                    arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                    REQUEST_CODE_NOTIFICATIONS
+                )
+            }
+        }
     }
 
     override fun onResume() {
