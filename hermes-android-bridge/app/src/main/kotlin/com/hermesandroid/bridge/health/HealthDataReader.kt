@@ -13,6 +13,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
 /**
@@ -64,19 +65,36 @@ object HealthDataReader {
                 resp.records.sumOf { it.count }
             } catch (_: Exception) { null }
 
-            // 睡眠 (最近 24h, 取最近一条)
+            // 睡眠 (最近 48h 所有 session, 合并相邻段后取最近一段)
+            // 三星健康会把一次睡眠拆成多条 SleepSessionRecord 同步, 只取最近一条会漏掉主睡眠段
             var sleepMinutes: Long? = null
             var sleepStart: String? = null
             var sleepEnd: String? = null
             try {
+                val day48hStart = now.minus(48, ChronoUnit.HOURS)
                 val resp = client.readRecords(
-                    ReadRecordsRequest(SleepSessionRecord::class, TimeRangeFilter.between(day24hStart, now))
+                    ReadRecordsRequest(SleepSessionRecord::class, TimeRangeFilter.between(day48hStart, now))
                 )
-                val sleep = resp.records.maxByOrNull { it.endTime }
+                // 按开始时间排序, 相邻间隔 < 60 分钟视为同一段连续睡眠
+                data class Span(val start: Instant, val end: Instant)
+                val sorted = resp.records.sortedBy { it.startTime }
+                val spans = mutableListOf<Span>()
+                for (s in sorted) {
+                    val last = spans.lastOrNull()
+                    if (last != null && Duration.between(last.end, s.startTime).toMinutes() < 60) {
+                        spans[spans.size - 1] = Span(last.start, maxOf(last.end, s.endTime))
+                    } else {
+                        spans.add(Span(s.startTime, s.endTime))
+                    }
+                }
+                // 取结束时间最近的一段 (与三星健康"最近一次睡眠"对齐)
+                val sleep = spans.maxByOrNull { it.end }
                 if (sleep != null) {
-                    sleepMinutes = Duration.between(sleep.startTime, sleep.endTime).toMinutes()
-                    sleepStart = sleep.startTime.toString()
-                    sleepEnd = sleep.endTime.toString()
+                    sleepMinutes = Duration.between(sleep.start, sleep.end).toMinutes()
+                    // 输出本地时区带偏移的 ISO 时间 (不再输出 UTC, 避免 PC 端误读)
+                    val fmt = DateTimeFormatter.ISO_OFFSET_DATE_TIME.withZone(zone)
+                    sleepStart = fmt.format(sleep.start)
+                    sleepEnd = fmt.format(sleep.end)
                 }
             } catch (_: Exception) { /* 睡眠数据可能为空 */ }
 
