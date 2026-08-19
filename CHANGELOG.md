@@ -2,6 +2,33 @@
 
 All notable changes to this project are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/); this project adheres to Conventional Commits.
 
+## [0.5.3-samsung] — 2026-08-19
+
+Samsung / OneUI fork release (branch `samsung`, default). Built on top of upstream `main` @ `fbd6238` (includes mic recording #95, mic unstick fix #99, wake-key #101, MIT license).
+
+### Added
+- `/health` endpoint — direct Health Connect read (steps / sleep sessions / heart rate / active calories) via `HealthDataReader`. Replaces the old "open Samsung Health → screenshot → vision-OCR" flow: zero screen interruption, no OCR misreads. On China-ROM Samsung devices (no Google Health Connect), pair the free **Health Sync** app to bridge Samsung Health → Health Connect.
+- `/recent_apps` endpoint — recently used apps via UsageStats.
+- `ForegroundAppTracker` — three-tier foreground detection: UsageStats (system-level truth) → accessibility event cache (5 min) → accessibility window list fallback (max-layer filter). Fixes `/current_app` misreporting the launcher when OneUI's FreecessController freezes the accessibility service into a stale window snapshot.
+- Lock-screen detection via `Keyguard` class name (previously a systemui package-name guess).
+- Android 13+ `POST_NOTIFICATIONS` runtime permission (without it Samsung locks notification access; the notification listener cannot be enabled).
+- `PACKAGE_USAGE_STATS`, Health Connect read permissions and the `VIEW_PERMISSION_USAGE` intent filter.
+- `contrib/relay-supervisor.py` + `contrib/hermes-relay-daemon.py` — relay daemon lifecycle tied to the Hermes gateway (`gateway.pid`): auto start/stop, crash respawn; `contrib/hermes-android-relay.service` for systemd. Runs in an isolated venv so it never blocks `hermes update`.
+- China-friendly build mirrors: Aliyun Maven repositories + Tencent Gradle distribution.
+
+### Changed
+- Build toolchain: AGP 8.3.0 → 8.9.1, Gradle 8.6 → 8.11.1, compileSdk 34 → 36, `androidx.health.connect:connect-client:1.1.0`; versionCode 3 → 7, versionName 0.4.1 → 0.5.3.
+- Relay WebSocket heartbeat 15 s → 60 s (survives the Samsung cached-app freezer without disconnects); `/recent_apps` and `/health` added to the relay ROUTES whitelist (`tools/android_relay.py` + `hermes-android-plugin/android_relay.py`).
+- Bridge accessibility service no longer reassigns `serviceInfo` in `onServiceConnected` (OneUI firmware bug that breaks accessibility event dispatch).
+- `.gitignore`: `.gradle-home/`, `build.log`, `relay.log`.
+
+### Fixed
+- `/current_app` stale-snapshot false positives on OneUI (launcher misreport) — UsageStats is maintained by the system and unaffected by app freezing.
+- `ScreenRecorder` virtual-display null-safety (`vd.release()`).
+
+### Note
+- The published APK is a **debug build** (`hermes-android-0.5.3.apk`) — installable and fine for testing; a production release requires your own signing keystore.
+
 ## [Unreleased]
 
 ### Added

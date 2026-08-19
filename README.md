@@ -1,4 +1,31 @@
-# hermes-android
+# hermes-android for Samsung
+
+> **Samsung / OneUI fork** — [JomW/hermes-android-for-samsung](https://github.com/JomW/hermes-android-for-samsung)
+> This repository is a fork of [raulvidis/hermes-android](https://github.com/raulvidis/hermes-android) with Samsung Galaxy-specific enhancements (OneUI, incl. China ROM). The **default branch `samsung`** carries the enhanced version; `main` tracks upstream unchanged.
+> 🇨🇳 中文说明见 [README.zh-CN.md](README.zh-CN.md)
+
+## 📱 Download the APK
+
+Grab `hermes-android-0.5.3.apk` from the [Releases page](https://github.com/JomW/hermes-android-for-samsung/releases). It is a debug-signed build — installable for testing. The bridge runs on Android 8.0+ (minSdk 26), optimized for Samsung Galaxy with OneUI.
+
+## ✨ What's different in this fork
+
+| Feature | Upstream | This fork (0.5.3) |
+|---|---|---|
+| `/current_app` foreground truth | Accessibility window snapshots — freeze into stale windows on OneUI (Samsung FreecessController) and misreport the launcher | UsageStats system-level truth with 3-tier fallback (`ForegroundAppTracker`) — immune to app freezing |
+| Health data | Screen-stealing "open Samsung Health + screenshot + vision" | `/health` endpoint reading Health Connect directly (steps / sleep / heart rate / calories) — zero interruption, no OCR errors |
+| Recent apps | — | `/recent_apps` endpoint (UsageStats) |
+| Lock screen detection | systemui package-name guess | Keyguard class detection |
+| Android 13+ notifications | — | `POST_NOTIFICATIONS` handling (Samsung locks notification access without it) |
+| Accessibility service | — | OneUI firmware bug workaround: no `serviceInfo` reassignment (broke event dispatch) |
+| Relay | heartbeat 15s, whitelist without health routes | heartbeat 60s (survives Samsung app freezer), `/recent_apps` + `/health` whitelisted |
+| Build toolchain | AGP 8.3.0 / Gradle 8.6 / compileSdk 34 | AGP 8.9.1 / Gradle 8.11.1 / compileSdk 36 + `health-connect-client` 1.1.0 |
+| China builds | official mirrors only | Aliyun Maven + Tencent Gradle mirrors |
+| Service ops | — | `contrib/` relay supervisor + daemon for Windows NSSM / systemd, tied to the Hermes gateway lifecycle |
+
+Full details: [CHANGELOG.md](CHANGELOG.md)
+
+---
 
 Give your AI agent hands. Remote Android device control for [hermes-agent](https://github.com/NousResearch/hermes-agent).
 
