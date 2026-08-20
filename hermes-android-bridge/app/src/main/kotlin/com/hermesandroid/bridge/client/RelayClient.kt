@@ -22,7 +22,8 @@ import java.security.MessageDigest
  * Receives commands over WebSocket, dispatches them to [CommandDispatcher],
  * and sends results back.
  *
- * Auto-reconnects on disconnect with exponential backoff (1s, 2s, 4s, 8s, max 30s).
+ * Auto-reconnects on disconnect with an ascending backoff schedule
+ * (30s → 1m → 2m → 5m → 30m, looping at 30m) that never gives up.
  */
 object RelayClient {
 
@@ -30,8 +31,6 @@ object RelayClient {
     private const val PREFS_NAME = "hermes_bridge_prefs"
     private const val KEY_SERVER_URL = "relay_server_url"
     private const val KEY_PAIRING_CODE = "relay_pairing_code"
-    private const val MAX_BACKOFF_MS = 30_000L
-    private const val MAX_RETRIES = 5
 
     private val gson = Gson()
     private val client = OkHttpClient.Builder()
@@ -42,7 +41,7 @@ object RelayClient {
     private var scope: CoroutineScope? = null
     private var reconnectJob: Job? = null
     private var prefs: SharedPreferences? = null
-    private val reconnectPolicy = ReconnectPolicy(maxRetries = MAX_RETRIES, maxBackoffMs = MAX_BACKOFF_MS)
+    private val reconnectPolicy = ReconnectPolicy()
 
     /** True between scheduling a reconnect and that attempt firing. Guards against
      *  onClosed + onFailure both scheduling for the same dead connection. */
@@ -235,8 +234,8 @@ object RelayClient {
         val attempt = reconnectPolicy.attempts
 
         reconnectJob = activeScope.launch {
-            Log.i(TAG, "Reconnecting in ${backoff}ms... (attempt $attempt/${reconnectPolicy.limit})")
-            notifyStatus(false, "Reconnecting in ${backoff / 1000}s... (attempt $attempt/${reconnectPolicy.limit})")
+            Log.i(TAG, "Reconnecting in ${backoff}ms... (attempt $attempt)")
+            notifyStatus(false, "Reconnecting in ${backoff / 1000}s... (attempt $attempt)")
             delay(backoff)
             beginReconnectAttempt(url, code)
         }

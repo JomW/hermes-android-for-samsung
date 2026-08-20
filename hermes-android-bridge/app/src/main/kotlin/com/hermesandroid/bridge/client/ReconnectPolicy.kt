@@ -1,26 +1,33 @@
 package com.hermesandroid.bridge.client
 
 /**
- * Attempt counter + exponential backoff for [RelayClient] reconnects.
+ * Reconnect schedule + stability tracking for [RelayClient].
+ *
+ * Unlike the old budget-based policy (5 attempts then give up), this policy
+ * NEVER stops reconnecting: the phone is a monitoring endpoint that must come
+ * back by itself after any outage (nightly network drop, server restart...).
+ *
+ * Backoff is a fixed ascending schedule — 30s → 1m → 2m → 5m → 30m — that
+ * loops at the last entry (30m) until a connection sticks. Once a session
+ * stays up for at least [stableSessionMs] the counter resets, so the next
+ * drop starts over from 30s again.
  *
  * State lives here rather than in the reconnect coroutine on purpose: every
  * failed connect fires another `onFailure`, which schedules another reconnect.
  * A counter local to that coroutine restarts at zero each time, so an
- * unreachable address never exhausts its retries and loops forever.
- *
- * The budget is only restored by [reset] (a user-initiated connect) or by
- * [onSessionEnded] for a session that stayed up at least [stableSessionMs].
- * Merely reaching `onOpen` is NOT enough: a relay that accepts the socket and
- * immediately closes it (wrong pairing code, auth reject) would otherwise
- * refill the budget on every attempt and flap forever.
+ * unreachable address would skip straight to the 30m cap.
  *
  * All state is guarded by this object's monitor — [RelayClient] touches it from
  * OkHttp callback threads, the reconnect coroutine, and the main thread.
  */
 class ReconnectPolicy(
-    private val maxRetries: Int = 5,
-    private val maxBackoffMs: Long = 30_000L,
-    private val baseBackoffMs: Long = 1_000L,
+    private val backoffScheduleMs: LongArray = longArrayOf(
+        30_000L,          // attempt 1: 30s
+        60_000L,          // attempt 2: 1m
+        120_000L,         // attempt 3: 2m
+        300_000L,         // attempt 4: 5m
+        1_800_000L,       // attempt 5+: 30m (loops here)
+    ),
     private val stableSessionMs: Long = 60_000L,
 ) {
 
@@ -29,28 +36,26 @@ class ReconnectPolicy(
     val attempts: Int
         @Synchronized get() = attemptCount
 
-    /** True once [maxRetries] attempts have been handed out without a reset. */
+    /** Never exhausted — reconnecting is infinite by design. */
     val isExhausted: Boolean
-        @Synchronized get() = attemptCount >= maxRetries
+        @Synchronized get() = false
 
     val limit: Int
-        get() = maxRetries
+        get() = Int.MAX_VALUE
 
     /**
      * Consume one attempt and return how long to wait before it.
-     * Caller must check [isExhausted] first.
      */
     @Synchronized
     fun nextBackoffMs(): Long {
-        val exponent = attemptCount.coerceAtMost(30)
+        val idx = attemptCount.coerceAtMost(backoffScheduleMs.size - 1)
         attemptCount++
-        val backoff = baseBackoffMs shl exponent
-        return if (backoff <= 0L) maxBackoffMs else backoff.coerceAtMost(maxBackoffMs)
+        return backoffScheduleMs[idx]
     }
 
     /**
      * Report that a connection that had opened is now gone, having lasted
-     * [durationMs]. Only a session that proved stable refills the budget.
+     * [durationMs]. Only a session that proved stable restarts the schedule.
      */
     @Synchronized
     fun onSessionEnded(durationMs: Long) {

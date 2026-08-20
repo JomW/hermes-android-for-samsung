@@ -60,14 +60,56 @@ def pid_alive(pid):
             return False
 
 
+_PROC_SCAN_CACHE = {"ts": 0.0, "alive": False}
+
+
+def _desktop_gateway_alive():
+    """True if any python process runs `hermes_cli.main ... serve|gateway run` (desktop mode).
+
+    The desktop app (`hermes_cli.main serve`) does NOT reliably maintain
+    I:/hermes/data/gateway.pid (container_boot.py deletes stale copies), so
+    the pid-file check alone misreads a healthy desktop gateway as down.
+    Scans process command lines; cached for 5s to avoid spawning PowerShell
+    on every poll. Same approach as vision_server.py --watch-pid detection.
+    """
+    now = time.time()
+    if now - _PROC_SCAN_CACHE["ts"] < 5:
+        return _PROC_SCAN_CACHE["alive"]
+    alive = False
+    try:
+        out = subprocess.run(
+            [
+                "powershell", "-NoProfile", "-NonInteractive", "-Command",
+                "(Get-CimInstance Win32_Process -Filter \"Name='python.exe'\").CommandLine",
+            ],
+            capture_output=True, text=True, timeout=10,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        ).stdout or ""
+        alive = any(
+            "hermes_cli.main" in ln and ("serve" in ln or "gateway" in ln)
+            for ln in out.splitlines()
+        )
+    except Exception:
+        alive = False
+    _PROC_SCAN_CACHE.update(ts=now, alive=alive)
+    return alive
+
+
 def gateway_alive():
-    """Read gateway.pid and report whether the recorded gateway process lives."""
+    """Report whether the Hermes gateway process lives.
+
+    Primary check: I:/hermes/data/gateway.pid (CLI `gateway run` mode).
+    Fallback: scan for desktop-mode gateway processes, because the desktop
+    app does not maintain that pid file.
+    """
     try:
         with open(GATEWAY_PID_FILE, "r", encoding="utf-8") as f:
             gw_pid = int(json.load(f).get("pid", 0))
-        return pid_alive(gw_pid)
+        if gw_pid > 0 and pid_alive(gw_pid):
+            return True
     except Exception:
-        return False
+        pass
+    return _desktop_gateway_alive()
 
 
 def spawn_daemon():

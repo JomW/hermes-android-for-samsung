@@ -42,6 +42,25 @@ def _watch_gateway_and_parent(stop_event):
         except Exception:
             return False
 
+    def desktop_gateway_alive():
+        """Desktop-mode gateway: any python running `hermes_cli.main ... serve|gateway run`."""
+        import subprocess
+        try:
+            out = subprocess.run(
+                [
+                    "powershell", "-NoProfile", "-NonInteractive", "-Command",
+                    "(Get-CimInstance Win32_Process -Filter \"Name='python.exe'\").CommandLine",
+                ],
+                capture_output=True, text=True, timeout=10,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            ).stdout or ""
+            return any(
+                "hermes_cli.main" in ln and ("serve" in ln or "gateway" in ln)
+                for ln in out.splitlines()
+            )
+        except Exception:
+            return False
+
     parent_pid = os.getppid()
     dead_since = None
     while not stop_event.is_set():
@@ -58,7 +77,10 @@ def _watch_gateway_and_parent(stop_event):
         if gw_pid > 0 and pid_alive(gw_pid):
             dead_since = None
         elif gw_pid > 0:
-            if dead_since is None:
+            # pid file stale? don't kill ourselves if a desktop gateway is alive
+            if desktop_gateway_alive():
+                dead_since = None
+            elif dead_since is None:
                 dead_since = time.time()
             elif time.time() - dead_since >= 10:
                 logger.info("Hermes gateway process is down — relay daemon exiting")
