@@ -65,8 +65,12 @@ object HealthDataReader {
                 resp.records.sumOf { it.count }
             } catch (_: Exception) { null }
 
-            // 睡眠 (最近 48h 所有 session, 合并相邻段后取最近一段)
-            // 三星健康会把一次睡眠拆成多条 SleepSessionRecord 同步, 只取最近一条会漏掉主睡眠段
+            // 睡眠 (最近 48h 所有 session, 聚合同一次睡眠事件的所有段)
+            // 三星健康会把同一次夜间睡眠拆成多条 SleepSessionRecord 同步(中途短暂苏醒即断段),
+            // 旧逻辑"合并 <60min + 只取结束最近一段"在间隔 >60min 的拆段时只报出靠后一段,
+            // 漏掉首段 → 睡眠总时长严重低估(如 03:09~04:49 + 06:36~11:00 只报出 264min)。
+            // 现改为: 相邻间隔 < 150min 的段视为同一次睡眠事件并聚合,
+            // sleepMinutes = 各段净睡眠时长之和(剔除中间清醒), start/end = 该事件完整跨度。
             var sleepMinutes: Long? = null
             var sleepStart: String? = null
             var sleepEnd: String? = null
@@ -75,22 +79,12 @@ object HealthDataReader {
                 val resp = client.readRecords(
                     ReadRecordsRequest(SleepSessionRecord::class, TimeRangeFilter.between(day48hStart, now))
                 )
-                // 按开始时间排序, 相邻间隔 < 60 分钟视为同一段连续睡眠
-                data class Span(val start: Instant, val end: Instant)
-                val sorted = resp.records.sortedBy { it.startTime }
-                val spans = mutableListOf<Span>()
-                for (s in sorted) {
-                    val last = spans.lastOrNull()
-                    if (last != null && Duration.between(last.end, s.startTime).toMinutes() < 60) {
-                        spans[spans.size - 1] = Span(last.start, maxOf(last.end, s.endTime))
-                    } else {
-                        spans.add(Span(s.startTime, s.endTime))
-                    }
-                }
-                // 取结束时间最近的一段 (与三星健康"最近一次睡眠"对齐)
+                // 按开始时间排序, 相邻间隔 < 150 分钟视为同一次睡眠事件, 跨段取净时长之和
+                val spans = SleepAggregator.merge(resp.records.map { it.startTime to it.endTime })
+                // 取结束时间最近的一次睡眠事件 (与三星健康"最近一次睡眠"对齐)
                 val sleep = spans.maxByOrNull { it.end }
                 if (sleep != null) {
-                    sleepMinutes = Duration.between(sleep.start, sleep.end).toMinutes()
+                    sleepMinutes = sleep.minutes
                     // 输出本地时区带偏移的 ISO 时间 (不再输出 UTC, 避免 PC 端误读)
                     val fmt = DateTimeFormatter.ISO_OFFSET_DATE_TIME.withZone(zone)
                     sleepStart = fmt.format(sleep.start)
